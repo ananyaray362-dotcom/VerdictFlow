@@ -95,6 +95,31 @@ export default function CaseDetailPage() {
     }
   }
 
+  const handleDraftMemo = async () => {
+    setDraftingMemo(true);
+    try {
+      const res = await fetch('/api/draft-memo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          caseTitle: caseData.title,
+          courtName: caseData.court,
+          judgmentDate: caseData.judgment_date,
+          summary: caseData.summary,
+          complianceActions: actions,
+          department: caseData.department,
+        }),
+      });
+      const data = await res.json();
+      setMemo(data.memo);
+      toast.success("Draft memo generated successfully!");
+    } catch (err: any) {
+      toast.error("Failed to draft memo");
+    } finally {
+      setDraftingMemo(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh]">
@@ -138,12 +163,27 @@ export default function CaseDetailPage() {
               <ShieldCheck className="h-4 w-4" /> Verify Case
             </Button>
           )}
-          <Button onClick={generateActionPlan} disabled={generatingPlan} className="rounded-xl gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20">
+          <Button onClick={handleDraftMemo} disabled={draftingMemo} className="rounded-xl gap-2 bg-gradient-to-r from-purple-600 to-pink-600 shadow-lg shadow-purple-500/20 text-white border-0 hover:from-purple-500 hover:to-pink-500">
+            {draftingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="text-base">✍️</span>}
+            Draft Official Reply
+          </Button>
+          <Button onClick={generateActionPlan} disabled={generatingPlan} className="rounded-xl gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20 text-white border-0 hover:from-blue-500 hover:to-indigo-500">
             {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <BrainCircuit className="h-4 w-4" />}
             Generate Plan
           </Button>
         </div>
       </motion.div>
+
+      {memo && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-800 border border-gray-600 rounded-xl p-6 relative">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="font-semibold text-white">📄 Draft Official Reply</h4>
+            <button onClick={() => { navigator.clipboard.writeText(memo); toast.success('Copied to clipboard!') }}
+              className="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+          </div>
+          <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono">{memo}</pre>
+        </motion.div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left Column: Details & Actions */}
@@ -316,6 +356,10 @@ export default function CaseDetailPage() {
                 </div>
               )}
             </div>
+          </motion.div>
+          
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }} className="mt-6">
+            <ChatJudgment judgmentText={caseData.raw_text || ""} caseTitle={caseData.title || ""} />
           </motion.div>
         </div>
       </div>

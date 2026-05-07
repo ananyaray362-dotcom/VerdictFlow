@@ -50,6 +50,7 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.1.5",
     "framer-motion": "^11.2.12",
+    "groq-sdk": "^0.33.0",
     "input-otp": "^1.2.4",
     "lucide-react": "^0.400.0",
     "next": "14.2.4",

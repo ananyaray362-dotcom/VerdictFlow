@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callGroq } from '@/lib/gemini/client';
+import { callGroq } from '@/lib/groq/client';
 
 const SYSTEM_PROMPT = `You are a legal AI assistant for Indian court judgments.
 Analyze the judgment text and return ONLY a raw JSON object (no markdown, no backticks).

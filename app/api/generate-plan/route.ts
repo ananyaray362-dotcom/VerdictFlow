@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { callGroq } from '@/lib/gemini/client';
+import { callGroq } from '@/lib/groq/client';
 
 const PLAN_PROMPT = (data: string) => `
 You are a senior Indian government legal advisor. Create an action plan from this court judgment extraction.

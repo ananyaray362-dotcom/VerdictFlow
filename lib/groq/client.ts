@@ -6,10 +6,9 @@ const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 export async function callGroqMessages(messages: any[], max_tokens: number = 800, temperature: number = 0.1): Promise<string> {
   const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey || apiKey === 'PASTE_YOUR_GROQ_KEY_HERE') {
+  if (!apiKey) {
     throw new Error('GROQ_API_KEY is not configured. Add it to .env.local');
   }
-
   const response = await fetch(`${GROQ_BASE}/chat/completions`, {
     method: 'POST',
     headers: {

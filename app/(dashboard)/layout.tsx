@@ -6,7 +6,7 @@ import React, { useState, useEffect } from "react"
 import {
   Scale, Home, Upload, FileText, CheckSquare,
   Settings, LogOut, Github, Linkedin, BarChart2,
-  ChevronLeft, ChevronRight, Sun, Moon,
+  ChevronLeft, ChevronRight, Sun, Moon, Zap,
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
@@ -19,9 +19,11 @@ const NAV_ITEMS = [
   { name: "Dashboard",       href: "/dashboard",      icon: Home,        badge: null },
   { name: "Upload Judgment", href: "/upload",          icon: Upload,      badge: null },
   { name: "Cases Directory", href: "/cases",           icon: FileText,    badge: null },
+  { name: "Compare Cases",   href: "/compare",         icon: Scale,       badge: null },
   { name: "Pending Review",  href: "/pending-review",  icon: CheckSquare, badge: "3"  },
-  { name: "Analytics",       href: "/analytics",       icon: BarChart2,   badge: null },
-  { name: "Settings",        href: "/settings",        icon: Settings,    badge: null },
+  { name: "Analytics",       href: "/analytics",      icon: BarChart2,   badge: null },
+  { name: "AI Co-Pilot",     href: "/copilot",        icon: Zap,         badge: null },
+  { name: "Settings",        href: "/settings",       icon: Settings,    badge: null },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

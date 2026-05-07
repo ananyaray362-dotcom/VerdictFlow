@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callGroq } from '@/lib/gemini/client';
+import { callGroq } from '@/lib/groq/client';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -110,6 +110,10 @@ export async function POST(req: NextRequest) {
       bench: parsed.bench || null,
       summary: parsed.summary || 'Summary not available.',
       riskScore: typeof parsed.riskScore === 'number' ? parsed.riskScore : 5,
+      riskReasoning: parsed.riskReasoning || 'Default risk score applied.',
+      financialImpact: parsed.financialImpact || { totalLiability: null, penalties: null, compensation: null },
+      urgencyLevel: parsed.urgencyLevel || 'MEDIUM',
+      contemptRisk: !!parsed.contemptRisk,
       estimatedComplianceDays: typeof parsed.estimatedComplianceDays === 'number' ? parsed.estimatedComplianceDays : 30,
       keyDirectives: Array.isArray(parsed.keyDirectives) ? parsed.keyDirectives : [],
       complianceActions: Array.isArray(parsed.complianceActions) ? parsed.complianceActions : [],

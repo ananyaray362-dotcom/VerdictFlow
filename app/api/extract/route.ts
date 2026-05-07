@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { callGroq } from '@/lib/gemini/client';
+import { callGroq } from '@/lib/groq/client';
 
 const PROMPT = `You are a legal document analyst for Indian courts.
 Extract from this judgment and return ONLY raw JSON (no markdown):

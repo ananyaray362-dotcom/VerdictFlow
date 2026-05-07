@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { DeadlineCountdown } from "@/components/deadline-countdown"
 
 /* ─── Modern Dashboard Command Center ─── */
 
@@ -50,6 +51,7 @@ export default function DashboardPage() {
     avgRisk: 0
   })
   const [recentCases, setRecentCases] = useState<any[]>([])
+  const [complianceActions, setComplianceActions] = useState<any[]>([])
 
   const supabase = createClient()
 
@@ -130,6 +132,9 @@ export default function DashboardPage() {
           { id: '2', title: 'Union of India vs. Green Earth NGO', case_number: 'PIL 442/2024', department: 'Forest', status: 'pending_review', priority: 'CRITICAL', created_at: new Date().toISOString(), summary: 'Stay order on tree felling in the Aarey colony area.' },
           { id: '3', title: 'Municipal Corp vs. Health First Ltd', case_number: 'CA 889/2023', department: 'Health', status: 'processing', priority: 'MEDIUM', created_at: new Date().toISOString(), summary: 'Mandatory waste management audit for private hospitals.' }
         ])
+      }
+      if (actions) {
+        setComplianceActions(actions)
       }
     } catch (err: any) {
       console.error("Dashboard data fetch error:", err)
@@ -293,6 +298,11 @@ export default function DashboardPage() {
           </div>
         </motion.div>
       </div>
+
+      {/* Deadline Countdown Widget */}
+      <motion.div variants={itemVariants} className="w-full">
+        <DeadlineCountdown actions={complianceActions} />
+      </motion.div>
 
       {/* Intelligence Stream (Recent Cases) */}
       <motion.div variants={itemVariants} className="rounded-[2.5rem] border border-border bg-card shadow-sm overflow-hidden">

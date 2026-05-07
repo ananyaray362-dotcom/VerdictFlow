@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { callGroq } from '@/lib/gemini/client';
+import { callGroq } from '@/lib/groq/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +23,7 @@ const PROMPT = `Analyze this Indian court judgment and return ONLY a raw JSON ob
 function parseJSON(raw: string): any {
   try {
     return JSON.parse(raw.replace(/^```json\s*/im, '').replace(/^```\s*/im, '').replace(/\s*```$/im, '').trim());
-  } catch {}
+  } catch { }
   const s = raw.indexOf('{'), e = raw.lastIndexOf('}');
   if (s !== -1 && e > s) return JSON.parse(raw.substring(s, e + 1));
   throw new Error('Could not parse AI response');

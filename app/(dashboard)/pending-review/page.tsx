@@ -42,10 +42,15 @@ function ReviewCard({
       exit={{ opacity: 0, x: -80, scale: 0.95 }}
       transition={{ duration: 0.3 }}
       className={cn(
-        "rounded-2xl border bg-card p-5 space-y-4 transition-all duration-200",
-        checked ? "border-blue-500/50 bg-blue-500/5" : "border-border hover:border-border/80"
+        "group relative overflow-hidden rounded-[1.5rem] border bg-card/60 backdrop-blur-xl p-6 space-y-5 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1",
+        checked ? "border-blue-500/50 bg-blue-500/10 shadow-[0_0_30px_-5px_rgba(59,130,246,0.2)]" : "border-border/50 hover:border-blue-500/30"
       )}
     >
+      {/* Background glow effect based on priority */}
+      <div className={cn("absolute -right-12 -top-12 h-40 w-40 rounded-full blur-3xl opacity-5 group-hover:opacity-20 transition-opacity", 
+        c.priority === 'critical' ? 'bg-red-500' : c.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'
+      )} />
+
       {/* Top row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
@@ -59,8 +64,8 @@ function ReviewCard({
               : <Square className="h-5 w-5 text-muted-foreground" />}
           </button>
           <div>
-            <p className="font-mono text-sm font-bold text-blue-400">{c.case_number}</p>
-            <p className="text-sm font-semibold mt-0.5 leading-tight">{c.case_title}</p>
+            <p className="font-mono text-[13px] tracking-wider font-black text-blue-400 uppercase">{c.case_number}</p>
+            <p className="text-[15px] font-bold mt-1 leading-snug group-hover:text-blue-400 transition-colors">{c.case_title}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -70,7 +75,7 @@ function ReviewCard({
       </div>
 
       {/* Action summary */}
-      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 pl-8">
+      <p className="text-[13px] font-medium text-muted-foreground leading-relaxed line-clamp-3 pl-8">
         {c.action_summary}
       </p>
 
@@ -103,22 +108,22 @@ function ReviewCard({
       </div>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-3 pl-8 pt-1">
+      <div className="flex items-center gap-3 pl-8 pt-2">
         <Button
           size="sm"
           onClick={onApprove}
-          className="gap-2 h-8 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 text-white flex-1"
+          className="gap-2 h-9 text-xs rounded-xl bg-emerald-600/90 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 text-white flex-1 font-bold"
         >
-          <CheckCircle2 className="h-3.5 w-3.5" />
+          <CheckCircle2 className="h-4 w-4" />
           Approve & Verify
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={onRevision}
-          className="gap-2 h-8 text-xs rounded-xl border-amber-500/30 text-amber-400 hover:bg-amber-500/10 flex-1"
+          className="gap-2 h-9 text-xs rounded-xl border-amber-500/30 text-amber-400 hover:bg-amber-500/10 flex-1 font-bold"
         >
-          <XCircle className="h-3.5 w-3.5" />
+          <XCircle className="h-4 w-4" />
           Request Revision
         </Button>
       </div>
@@ -208,7 +213,7 @@ export default function PendingReviewPage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="grid grid-cols-2 md:grid-cols-4 gap-3"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
       >
         {[
           { label: "Total Pending",  value: stats.total,    icon: Inbox,         bg: "bg-blue-500/10",    text: "text-blue-400"    },
@@ -216,13 +221,13 @@ export default function PendingReviewPage() {
           { label: "Due Today",      value: stats.dueToday, icon: Clock,         bg: "bg-amber-500/10",   text: "text-amber-400"   },
           { label: "Overdue",        value: stats.overdue,  icon: XCircle,       bg: "bg-rose-600/10",    text: "text-rose-400"    },
         ].map(({ label, value, icon: Icon, bg, text }) => (
-          <div key={label} className={cn("rounded-2xl border border-border p-4 flex items-center gap-3", bg + "/20")}>
-            <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0", bg)}>
-              <Icon className={cn("h-5 w-5", text)} />
+          <div key={label} className={cn("rounded-[1.5rem] border border-border p-5 flex items-center gap-4 bg-card/40 backdrop-blur-md shadow-sm hover:shadow-lg transition-all", bg + "/10")}>
+            <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center shrink-0 shadow-inner", bg)}>
+              <Icon className={cn("h-6 w-6", text)} />
             </div>
             <div>
-              <p className={cn("text-2xl font-extrabold", text)}>{value}</p>
-              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className={cn("text-3xl font-black tracking-tight", text)}>{value}</p>
+              <p className="text-[13px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
             </div>
           </div>
         ))}
@@ -284,7 +289,7 @@ export default function PendingReviewPage() {
           <p className="text-sm text-muted-foreground">All pending reviews have been processed.</p>
         </motion.div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           <AnimatePresence>
             {filtered.map(c => (
               <ReviewCard
