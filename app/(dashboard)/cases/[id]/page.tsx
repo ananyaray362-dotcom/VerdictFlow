@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { CaseTimeline } from "@/components/dashboard/CaseTimeline"
+import { ChatJudgment } from "@/components/chat-judgment"
 
 export default function CaseDetailPage() {
   const { id } = useParams()
@@ -20,6 +21,8 @@ export default function CaseDetailPage() {
   const [actions, setActions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [generatingPlan, setGeneratingPlan] = useState(false)
+  const [draftingMemo, setDraftingMemo] = useState(false)
+  const [memo, setMemo] = useState<string | null>(null)
 
   const supabase = createClient()
 
