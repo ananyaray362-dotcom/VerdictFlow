@@ -211,3 +211,8 @@
   text-transform: uppercase;
   border: 1px solid rgba(245, 158, 11, 0.2);
 }
+
+/* No-scrollbar utility — used by mobile nav */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+

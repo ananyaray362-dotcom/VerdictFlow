@@ -4,7 +4,7 @@ import { useState, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   CheckCircle2, XCircle, Filter, Clock, AlertTriangle,
-  CheckSquare, Square, Trash2, Inbox,
+  CheckSquare, Square, Trash2, Inbox, FileSignature, X, Copy, Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/dashboard/StatusBadge"
@@ -24,13 +24,14 @@ function getDaysLeft(deadline: string) {
 
 /* ─── Review Card ─── */
 function ReviewCard({
-  c, checked, onToggle, onApprove, onRevision,
+  c, checked, onToggle, onApprove, onRevision, onDraftNotice,
 }: {
   c: MockCase
   checked: boolean
   onToggle: () => void
   onApprove: () => void
   onRevision: () => void
+  onDraftNotice: (c: MockCase) => void
 }) {
   const dl = getDaysLeft(c.deadline)
 
@@ -108,7 +109,7 @@ function ReviewCard({
       </div>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-3 pl-8 pt-2">
+      <div className="flex items-center gap-3 pl-8 pt-2 flex-wrap">
         <Button
           size="sm"
           onClick={onApprove}
@@ -126,6 +127,15 @@ function ReviewCard({
           <XCircle className="h-4 w-4" />
           Request Revision
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onDraftNotice(c)}
+          className="gap-2 h-9 text-xs rounded-xl border-purple-500/30 text-purple-400 hover:bg-purple-500/10 font-bold w-full mt-1"
+        >
+          <FileSignature className="h-4 w-4" />
+          Draft Formal Notice
+        </Button>
       </div>
     </motion.div>
   )
@@ -141,6 +151,9 @@ export default function PendingReviewPage() {
   const [selected,  setSelected]  = useState<Set<string>>(new Set())
   const [priorityF, setPriorityF] = useState("")
   const [deptF,     setDeptF]     = useState("")
+  const [noticeModal, setNoticeModal] = useState<{ open: boolean; case: MockCase | null; notice: string; loading: boolean }>({
+    open: false, case: null, notice: '', loading: false
+  })
 
   const stats = useMemo(() => ({
     total:    queue.length,
@@ -192,6 +205,29 @@ export default function PendingReviewPage() {
     toast.success(`${ids.length} cases approved & verified ✅`)
   }
 
+  const handleDraftNotice = async (c: MockCase) => {
+    setNoticeModal({ open: true, case: c, notice: '', loading: true })
+    try {
+      const overdue = c.compliance_actions?.[0] || 'Pending compliance action'
+      const res = await fetch('/api/draft-notice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: overdue,
+          caseName: c.case_title,
+          department: c.department,
+          deadline: c.deadline,
+          officerName: 'Compliance Officer'
+        }),
+      })
+      const data = await res.json()
+      setNoticeModal(prev => ({ ...prev, notice: data.notice || 'Failed to generate notice.', loading: false }))
+    } catch {
+      setNoticeModal(prev => ({ ...prev, notice: 'Error generating notice. Please try again.', loading: false }))
+      toast.error('Failed to draft notice')
+    }
+  }
+
   const toggleAll = () => {
     if (selected.size === filtered.length)
       setSelected(new Set())
@@ -201,7 +237,8 @@ export default function PendingReviewPage() {
   const departments = Array.from(new Set(queue.map(c => c.department)))
 
   return (
-    <div className="space-y-6 pb-32">
+    <>
+      <div className="space-y-6 pb-32">
       {/* Header */}
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
         <h1 className="text-3xl font-extrabold tracking-tight">Pending Review</h1>
@@ -299,6 +336,7 @@ export default function PendingReviewPage() {
                 onToggle={() => toggleSelect(c.id)}
                 onApprove={() => approve(c.id)}
                 onRevision={() => revision(c.id)}
+                onDraftNotice={handleDraftNotice}
               />
             ))}
           </AnimatePresence>
@@ -338,5 +376,65 @@ export default function PendingReviewPage() {
         )}
       </AnimatePresence>
     </div>
+
+      {/* Notice Modal */}
+      <AnimatePresence>
+        {noticeModal.open && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setNoticeModal(prev => ({ ...prev, open: false }))}
+          >
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-[#0A0D14] border border-white/10 rounded-3xl p-8 max-w-2xl w-full shadow-2xl max-h-[85vh] flex flex-col"
+            >
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-purple-500/10 rounded-xl border border-purple-500/20">
+                    <FileSignature className="h-5 w-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-white">Automated Legal Notice</h3>
+                    <p className="text-xs text-gray-400 font-medium mt-0.5">Generated by Llama 3.3 · {noticeModal.case?.case_title}</p>
+                  </div>
+                </div>
+                <button onClick={() => setNoticeModal(prev => ({ ...prev, open: false }))}
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 transition-all">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 bg-black/30 border border-white/5 rounded-2xl p-6 min-h-[300px]">
+                {noticeModal.loading ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-4 py-10">
+                    <div className="flex space-x-1.5">
+                      <motion.div animate={{ y: [0,-6,0] }} transition={{ repeat: Infinity, duration: 0.7, delay: 0 }} className="w-2.5 h-2.5 bg-purple-500 rounded-full" />
+                      <motion.div animate={{ y: [0,-6,0] }} transition={{ repeat: Infinity, duration: 0.7, delay: 0.15 }} className="w-2.5 h-2.5 bg-purple-400 rounded-full" />
+                      <motion.div animate={{ y: [0,-6,0] }} transition={{ repeat: Infinity, duration: 0.7, delay: 0.3 }} className="w-2.5 h-2.5 bg-purple-300 rounded-full" />
+                    </div>
+                    <p className="text-sm text-gray-400 font-medium">Drafting formal legal notice...</p>
+                  </div>
+                ) : (
+                  <pre className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed font-mono">{noticeModal.notice}</pre>
+                )}
+              </div>
+
+              {!noticeModal.loading && (
+                <div className="flex gap-3 mt-5">
+                  <button onClick={() => { navigator.clipboard.writeText(noticeModal.notice); toast.success('Notice copied to clipboard!') }}
+                    className="flex-1 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl px-5 py-3 text-sm font-bold transition-all">
+                    <Copy className="h-4 w-4" /> Copy Notice
+                  </button>
+                  <button onClick={() => handleDraftNotice(noticeModal.case!)}
+                    className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl px-5 py-3 text-sm font-bold transition-all">
+                    <Loader2 className="h-4 w-4" /> Regenerate
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   )
 }

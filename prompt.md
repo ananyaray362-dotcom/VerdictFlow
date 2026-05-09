@@ -703,10 +703,110 @@ Add to sidebar navigation:
 
 ---
 
+## FEATURE 8 — "One-Click Penalty Payment" (Razorpay Integration) 💳
+
+If the AI extracts a financial penalty from the judgment, allow officers or concerned parties to instantly initiate a penalty payment using Razorpay.
+
+### Add `app/api/create-payment/route.ts`:
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import Razorpay from 'razorpay';
+
+export async function POST(req: NextRequest) {
+  try {
+    const { amount, receipt } = await req.json();
+
+    const razorpay = new Razorpay({
+      key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
+      key_secret: process.env.RAZORPAY_KEY_SECRET!,
+    });
+
+    const options = {
+      amount: amount * 100, // amount in smallest currency unit (paise)
+      currency: "INR",
+      receipt: receipt,
+    };
+
+    const order = await razorpay.orders.create(options);
+    return NextResponse.json(order);
+  } catch (error) {
+    console.error("Razorpay Error:", error);
+    return NextResponse.json({ error: "Failed to create payment" }, { status: 500 });
+  }
+}
+```
+
+### Add a Pay Button in Case Detail or `components/risk-score-card.tsx`:
+
+```tsx
+'use client';
+import { useState } from 'react';
+import { IndianRupee } from 'lucide-react';
+import Script from 'next/script';
+
+export function PayPenaltyButton({ amount, caseId }: { amount: number, caseId: string }) {
+  const [loading, setLoading] = useState(false);
+
+  const handlePayment = async () => {
+    setLoading(true);
+    try {
+      // 1. Create order on server
+      const res = await fetch('/api/create-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, receipt: `receipt_${caseId}` }),
+      });
+      const order = await res.json();
+
+      // 2. Initialize Razorpay checkout
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, // Enter the Key ID generated from the Dashboard
+        amount: order.amount,
+        currency: order.currency,
+        name: "VerdictFlow",
+        description: "Court Penalty Payment",
+        order_id: order.id,
+        handler: function (response: any) {
+          alert(`Payment Successful! Payment ID: ${response.razorpay_payment_id}`);
+        },
+        theme: {
+          color: "#4f46e5",
+        },
+      };
+
+      const rzp1 = new (window as any).Razorpay(options);
+      rzp1.open();
+    } catch (error) {
+      console.error("Payment failed", error);
+      alert("Payment failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
+      <button
+        onClick={handlePayment}
+        disabled={loading}
+        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition-colors mt-3 w-full justify-center"
+      >
+        <IndianRupee size={16} />
+        {loading ? 'Processing...' : `Pay Penalty (₹${amount.toLocaleString('en-IN')})`}
+      </button>
+    </>
+  );
+}
+```
+
+---
+
 ## INSTALL DEPENDENCIES
 
 ```bash
-npm install groq-sdk date-fns
+npm install groq-sdk date-fns razorpay
 ```
 
 ---
@@ -715,18 +815,21 @@ npm install groq-sdk date-fns
 
 ```env
 GROQ_API_KEY=your_api_key_here
+NEXT_PUBLIC_RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 ```
 
 ---
 
 ## IMPLEMENTATION ORDER
 
-1. `npm install groq-sdk date-fns`
-2. Add `GROQ_API_KEY` to `.env.local`
+1. `npm install groq-sdk date-fns razorpay`
+2. Add `GROQ_API_KEY`, `NEXT_PUBLIC_RAZORPAY_KEY_ID`, and `RAZORPAY_KEY_SECRET` to `.env.local`
 3. Feature 1 — Chat with Judgment (biggest wow factor for demo)
 4. Feature 2 — Risk Score + Financial Impact (extends existing analyze route)
-5. Feature 3 — Compliance Timeline (pure UI, quick win)
-6. Feature 6 — Deadline Countdown on Dashboard (immediate visual impact)
-7. Feature 7 — AI Co-Pilot tab (standalone, new sidebar entry)
-8. Feature 4 — Draft Memo (quick Llama integration)
-9. Feature 5 — Contradiction Detector (advanced, do last)
+5. Feature 8 — One-Click Penalty Payment (integrates with financial impact)
+6. Feature 3 — Compliance Timeline (pure UI, quick win)
+7. Feature 6 — Deadline Countdown on Dashboard (immediate visual impact)
+8. Feature 7 — AI Co-Pilot tab (standalone, new sidebar entry)
+9. Feature 4 — Draft Memo (quick Llama integration)
+10. Feature 5 — Contradiction Detector (advanced, do last)

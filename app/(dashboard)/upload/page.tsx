@@ -695,11 +695,11 @@ function Step3Review({ data, setData, file, onNext }: { data: ExtractedData; set
                     data.riskScore >= 7 ? "text-red-400" : data.riskScore >= 4 ? "text-amber-400" : "text-emerald-400"
                   )}>{data.riskScore}/10</span>
                   <div className="h-1.5 flex-1 bg-secondary rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className={cn(
                         "h-full rounded-full",
                         data.riskScore >= 7 ? "bg-red-500" : data.riskScore >= 4 ? "bg-amber-500" : "bg-emerald-500"
-                      )} 
+                      )}
                       style={{ width: `${data.riskScore * 10}%` }}
                     />
                   </div>
@@ -828,18 +828,27 @@ function BulkUploadQueue() {
     id: string;
     file: File;
     status: 'waiting' | 'processing' | 'done' | 'error';
+    progress: number;
+    statusMsg: string;
     result?: any;
     error?: string;
   }[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [allDone, setAllDone] = useState(false)
+
+  const updateItem = (id: string, patch: any) =>
+    setUploadQueue(q => q.map(item => item.id === id ? { ...item, ...patch } : item))
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newItems = acceptedFiles.map(f => ({
       id: Math.random().toString(36).substring(2),
       file: f,
-      status: 'waiting' as const
+      status: 'waiting' as const,
+      progress: 0,
+      statusMsg: 'Waiting in queue...'
     }))
     setUploadQueue(q => [...q, ...newItems])
+    setAllDone(false)
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -849,134 +858,202 @@ function BulkUploadQueue() {
     multiple: true,
   })
 
+  const { onDrag: _d, onDragStart: _ds, onDragEnd: _de, ...dropRootProps } = getRootProps()
+
+  const processFile = async (item: typeof uploadQueue[0]) => {
+    const supabase = createClient()
+    updateItem(item.id, { status: 'processing', progress: 5, statusMsg: 'Sending to Llama 3.3...' })
+    try {
+      const formData = new FormData()
+      formData.append("file", item.file)
+      const response = await fetch("/api/analyze-judgment/stream", { method: "POST", body: formData })
+      if (!response.ok) throw new Error("Analysis API failed")
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error("No stream available")
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let extractedData: any = null
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n\n")
+        buffer = lines.pop() || ""
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.replace("data: ", "").trim())
+              if (data.stage === "error") throw new Error(data.message)
+              updateItem(item.id, { progress: data.progress || 50, statusMsg: data.message || 'Analyzing...' })
+              if (data.stage === "complete" && data.data) {
+                extractedData = { ...data.data, complianceActions: (data.data.complianceActions || []).map((a: any, idx: number) => ({ ...a, id: `bulk-${idx}`, included: true })) }
+              }
+            } catch { /* ignore partial parse */ }
+          }
+        }
+      }
+      if (!extractedData) throw new Error("No data returned from AI")
+      updateItem(item.id, { progress: 85, statusMsg: 'Saving to database...' })
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.pdf`
+      const { error: uploadError } = await supabase.storage.from('judgments').upload(`judgments/${fileName}`, item.file)
+      if (uploadError) throw new Error(`Storage: ${uploadError.message}`)
+      const { data: { publicUrl } } = supabase.storage.from('judgments').getPublicUrl(`judgments/${fileName}`)
+      const saveRes = await fetch('/api/save-case', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysisData: extractedData, caseNumber: extractedData.caseNumber, department: extractedData.complianceActions?.[0]?.responsibleDepartment || 'Unassigned', pdfUrl: publicUrl, pdfFilename: item.file.name })
+      })
+      if (!saveRes.ok) { const e = await saveRes.json(); throw new Error(e.error || 'Save failed') }
+      updateItem(item.id, { status: 'done', progress: 100, statusMsg: 'Saved to Cases Directory', result: extractedData })
+    } catch (error: any) {
+      updateItem(item.id, { status: 'error', progress: 0, statusMsg: error.message || 'Failed', error: error.message })
+    }
+  }
+
   const processQueue = async () => {
     if (isProcessing) return
     setIsProcessing(true)
-
-    const supabase = createClient()
-
-    for (let i = 0; i < uploadQueue.length; i++) {
-      let currentItem;
-      setUploadQueue(q => {
-        currentItem = q[i];
-        if (!currentItem || currentItem.status !== 'waiting') return q;
-        const newQ = [...q];
-        newQ[i] = { ...newQ[i], status: 'processing' };
-        return newQ;
-      });
-
-      // Need to grab current state again directly from state array since closure is tricky
-      // It's safer to just await inside the loop and trust the synchronous state read
-      if (!uploadQueue[i] || uploadQueue[i].status !== 'waiting') continue;
-
-      try {
-        const formData = new FormData()
-        formData.append("file", uploadQueue[i].file)
-
-        const response = await fetch("/api/analyze", {
-          method: "POST",
-          body: formData,
-        })
-
-        if (!response.ok) {
-          throw new Error("Failed to start analysis")
-        }
-
-        const result = await response.json()
-        if (!result.success || !result.data) {
-          throw new Error("No analysis data returned")
-        }
-
-        const extractedData = result.data;
-        // Add IDs to actions for bulk too
-        extractedData.complianceActions = extractedData.complianceActions.map((a: any, idx: number) => ({
-          ...a,
-          id: `bulk-action-${idx}`,
-          included: true
-        }))
-
-        const fileExt = uploadQueue[i].file.name.split('.').pop()
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
-        const filePath = `judgments/${fileName}`
-
-        const { error: uploadError } = await supabase.storage.from('judgments').upload(filePath, uploadQueue[i].file)
-        if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
-
-        const { data: { publicUrl } } = supabase.storage.from('judgments').getPublicUrl(filePath)
-
-        const saveRes = await fetch('/api/save-case', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            analysisData: extractedData,
-            caseNumber: extractedData.caseNumber,
-            department: extractedData.complianceActions?.[0]?.responsibleDepartment,
-            pdfUrl: publicUrl,
-            pdfFilename: uploadQueue[i].file.name
-          })
-        });
-
-        if (!saveRes.ok) {
-          const err = await saveRes.json();
-          throw new Error(err.error || 'Failed to save case');
-        }
-
-        setUploadQueue(q => {
-          const newQ = [...q];
-          newQ[i] = { ...newQ[i], status: 'done', result: extractedData };
-          return newQ;
-        });
-
-      } catch (error: any) {
-        setUploadQueue(q => {
-          const newQ = [...q];
-          newQ[i] = { ...newQ[i], status: 'error', error: error.message };
-          return newQ;
-        });
-      }
+    for (const item of uploadQueue.filter(q => q.status === 'waiting')) {
+      await processFile(item)
     }
-    
     setIsProcessing(false)
+    setAllDone(true)
+    toast.success('Bulk processing complete!')
   }
 
+  const removeItem = (id: string) => setUploadQueue(q => q.filter(item => item.id !== id))
+  const clearDone = () => setUploadQueue(q => q.filter(item => item.status !== 'done'))
+  const waitingCount = uploadQueue.filter(q => q.status === 'waiting').length
+  const doneCount = uploadQueue.filter(q => q.status === 'done').length
+
   return (
-    <div className="space-y-6">
-      <div {...getRootProps()} className={cn("border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all", isDragActive ? "border-blue-500 bg-blue-500/10" : "border-border hover:border-blue-500/50 hover:bg-blue-500/5")}>
+    <div className="space-y-5">
+      <div {...dropRootProps} className={cn(
+        "border-2 border-dashed rounded-3xl p-10 text-center cursor-pointer transition-all duration-300 relative overflow-hidden",
+        isDragActive ? "border-blue-500 bg-blue-500/10 scale-[1.01]" : "border-white/10 hover:border-blue-500/40 hover:bg-blue-500/5"
+      )}>
         <input {...getInputProps()} />
-        <UploadCloud className="h-10 w-10 mx-auto text-blue-400 mb-4" />
-        <p className="text-lg font-semibold mb-1">Drag & drop multiple PDFs</p>
-        <p className="text-sm text-muted-foreground">or click to browse files</p>
+        <div className="absolute -top-8 -left-8 w-32 h-32 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
+        <UploadCloud className={cn("h-12 w-12 mx-auto mb-4 transition-colors", isDragActive ? "text-blue-400" : "text-blue-400/60")} />
+        <p className="text-lg font-bold text-white mb-1">{isDragActive ? "Release to add files" : "Drag & drop multiple PDFs"}</p>
+        <p className="text-sm text-gray-500">or <span className="text-blue-400 font-semibold">click to browse</span> · Max 50MB per file</p>
+        {uploadQueue.length > 0 && (
+          <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-gray-300">
+            <FileText className="h-3.5 w-3.5 text-blue-400" />
+            {uploadQueue.length} file{uploadQueue.length !== 1 ? 's' : ''} in queue
+          </div>
+        )}
       </div>
 
       {uploadQueue.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-lg">Upload Queue</h3>
-            <Button onClick={processQueue} disabled={isProcessing || uploadQueue.every(q => q.status === 'done' || q.status === 'error')}>
-              {isProcessing ? "Processing..." : "Process Queue"}
-            </Button>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-[#0A0D14]/80 border border-white/5 rounded-3xl overflow-hidden shadow-xl backdrop-blur-md"
+        >
+          <div className="px-6 py-4 border-b border-white/5 bg-white/[0.02] flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="font-black text-white text-base">Upload Queue</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {waitingCount} waiting · {doneCount} done · {uploadQueue.filter(q => q.status === 'error').length} errors
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {doneCount > 0 && (
+                <button onClick={clearDone} className="text-xs text-gray-400 hover:text-white bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl transition-all">Clear Done</button>
+              )}
+              <button onClick={processQueue} disabled={isProcessing || waitingCount === 0}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-5 py-2 text-sm font-bold transition-all shadow-[0_0_15px_rgba(37,99,235,0.3)]">
+                {isProcessing ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing...</> : <><BrainCircuit className="h-4 w-4" /> Process {waitingCount} File{waitingCount !== 1 ? 's' : ''}</>}
+              </button>
+            </div>
           </div>
-          <div className="space-y-3">
-            {uploadQueue.map(item => (
-              <div key={item.id} className="flex items-center justify-between p-3 rounded-xl border border-border bg-secondary/30">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-sm font-medium truncate max-w-[200px] sm:max-w-[300px]">{item.file.name}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  {item.status === 'waiting' && <span className="text-muted-foreground">Waiting</span>}
-                  {item.status === 'processing' && <span className="text-blue-400 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin"/> Processing</span>}
-                  {item.status === 'done' && <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="h-4 w-4"/> Done</span>}
-                  {item.status === 'error' && <span className="text-red-400 flex items-center gap-1" title={item.error}><AlertTriangle className="h-4 w-4"/> Error</span>}
-                </div>
-              </div>
-            ))}
+
+          <div className="divide-y divide-white/5">
+            <AnimatePresence>
+              {uploadQueue.map(item => (
+                <motion.div key={item.id} layout initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
+                  className="px-6 py-4 flex items-center gap-4 group"
+                >
+                  <div className={cn("h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 border transition-all", {
+                    'bg-white/5 border-white/10': item.status === 'waiting',
+                    'bg-blue-500/10 border-blue-500/20': item.status === 'processing',
+                    'bg-emerald-500/10 border-emerald-500/20': item.status === 'done',
+                    'bg-red-500/10 border-red-500/20': item.status === 'error',
+                  })}>
+                    {item.status === 'waiting' && <FileText className="h-5 w-5 text-gray-400" />}
+                    {item.status === 'processing' && <Loader2 className="h-5 w-5 text-blue-400 animate-spin" />}
+                    {item.status === 'done' && <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
+                    {item.status === 'error' && <AlertTriangle className="h-5 w-5 text-red-400" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white truncate">{item.file.name}</p>
+                    <p className={cn("text-xs font-medium mt-0.5", {
+                      'text-gray-400': item.status === 'waiting',
+                      'text-blue-400': item.status === 'processing',
+                      'text-emerald-400': item.status === 'done',
+                      'text-red-400': item.status === 'error',
+                    })}>{item.statusMsg}</p>
+                    {(item.status === 'processing' || item.status === 'done') && (
+                      <div className="mt-2 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                        <motion.div className={cn("h-full rounded-full", item.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500')}
+                          initial={{ width: 0 }} animate={{ width: `${item.progress}%` }} transition={{ duration: 0.5 }} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="shrink-0 flex items-center gap-2">
+                    {item.status === 'processing' && <span className="text-xs font-black text-blue-400 w-8 text-right">{item.progress}%</span>}
+                    {item.status !== 'processing' && (
+                      <button onClick={() => removeItem(item.id)}
+                        className="h-7 w-7 rounded-xl bg-white/5 hover:bg-red-500/20 text-gray-500 hover:text-red-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all text-lg leading-none">×</button>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
-        </div>
+
+          <AnimatePresence>
+            {allDone && doneCount > 0 && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="px-6 py-4 bg-emerald-500/5 border-t border-emerald-500/20 flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                <p className="text-sm font-bold text-emerald-400">{doneCount} case{doneCount > 1 ? 's' : ''} saved to Cases Directory.</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       )}
     </div>
   )
 }
+
+
+
+
+
+
+
+
+/* ─── Main Page ─── */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ─── Main Page ─── */
 export default function UploadPage() {

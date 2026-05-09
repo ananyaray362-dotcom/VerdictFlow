@@ -306,7 +306,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Page Content */}
         <div className="flex-1 overflow-auto">
-          <div className="p-6 max-w-7xl mx-auto">
+          <div className="p-4 sm:p-6 pb-24 md:pb-6 max-w-7xl mx-auto">
             <AnimatePresence mode="wait">
               <motion.div
                 key={pathname}
@@ -321,25 +321,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
 
-        {/* Mobile bottom nav */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border flex items-center justify-around py-2 px-2 z-30">
-          {NAV_ITEMS.slice(0, 5).map(item => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-[10px] transition-colors",
-                  isActive ? "text-blue-400 bg-blue-500/10" : "text-muted-foreground"
-                )}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="font-medium">{item.name.split(" ")[0]}</span>
-              </Link>
-            )
-          })}
+        {/* Mobile bottom nav — scrollable, shows all items */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-xl border-t border-white/10 z-30 shadow-2xl">
+          <div className="flex items-stretch overflow-x-auto no-scrollbar px-1 py-1 gap-1">
+            {NAV_ITEMS.map(item => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+              const Icon = item.icon
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={cn(
+                    "flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl text-[10px] font-semibold transition-all shrink-0 relative min-w-[60px]",
+                    isActive
+                      ? "text-blue-400 bg-blue-500/15 border border-blue-500/20"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                  <span>{item.name.split(" ")[0]}</span>
+                  {item.badge && (
+                    <span className="absolute top-1 right-1 h-3.5 w-3.5 rounded-full bg-red-500 text-[8px] font-black text-white flex items-center justify-center">
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
+          </div>
         </nav>
       </main>
     </div>
